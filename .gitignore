@@ -1,0 +1,7 @@
+*.csv
+*.mxbrec
+*.dll
+*.dlo
+*.obj
+*.lib
+*.exp
