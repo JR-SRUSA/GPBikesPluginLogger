@@ -15,6 +15,24 @@ EVENT_RUN_LAP = 9
 EVENT_RUN_SPLIT = 10
 EVENT_RUN_TELEMETRY = 11
 
+
+MATERIAL_NAMES = {
+    0: "airborne",
+    1: "asphalt",
+    2: "asphalt b",
+    3: "asphalt c",
+    4: "concrete",
+    5: "grass",
+    6: "sand",
+    7: "kerb",
+    8: "soil",
+    9: "painted asphalt",
+    10: "astroturf",
+}
+
+OFF_TRACK_MATERIALS = {5, 6, 8, 10}
+
+
 def f32(b,o): return struct.unpack_from('<f', b, o)[0], o+4
 def i32(b,o): return struct.unpack_from('<i', b, o)[0], o+4
 def f32s(b,o,n): return list(struct.unpack_from('<'+'f'*n, b, o)), o+4*n
@@ -29,7 +47,8 @@ def decode_event_init(b):
     d['number_of_gears'],o=i32(b,o); d['max_rpm'],o=i32(b,o); d['limiter'],o=i32(b,o); d['shift_rpm'],o=i32(b,o)
     d['engine_opt_temperature'],o=f32(b,o); alarms,o=f32s(b,o,2)
     d['engine_temperature_alarm_low'],d['engine_temperature_alarm_high']=alarms
-    d['max_fuel'],o=f32(b,o); susp,o=f32s(b,o,2)
+    d['max_fuel'],o=f32(b,o)
+    susp,o=f32s(b,o,2)
     d['front_susp_max_travel'],d['rear_susp_max_travel']=susp
     d['steer_lock'],o=f32(b,o)
     d['category']=cstr(b[o:o+100]); o+=100
@@ -40,7 +59,10 @@ def decode_event_init(b):
 
 def decode_session(b):
     o=0; d={}
-    d['session'],o=i32(b,o); d['conditions'],o=i32(b,o); d['air_temperature'],o=f32(b,o); d['track_temperature'],o=f32(b,o)
+    d['session'],o=i32(b,o)
+    d['conditions'],o=i32(b,o)
+    d['air_temperature'],o=f32(b,o)
+    d['track_temperature'],o=f32(b,o)
     d['setup_file_name']=cstr(b[o:o+100])
     return d
 
@@ -53,34 +75,82 @@ def decode_split(b):
     return {'split':split,'split_time_ms':split_time_ms,'best_diff_ms':best_diff_ms,'split_time_s':split_time_ms/1000.0}
 
 def decode_bike_data(b):
-    o=0; d={}
-    d['Engine'],o=i32(b,o); d['CylHeadTemp'],o=f32(b,o); d['WaterTemp'],o=f32(b,o); d['Gear'],o=i32(b,o)
-    d['Fuel'],o=f32(b,o); d['Speed'],o=f32(b,o)
-    d['PosX'],o=f32(b,o); d['PosY_3D'],o=f32(b,o); d['PosY'],o=f32(b,o)
-    d['VelocityX'],o=f32(b,o); d['VelocityY'],o=f32(b,o); d['VelocityZ'],o=f32(b,o)
-    d['AccelerationX'],o=f32(b,o); d['AccelerationY'],o=f32(b,o); d['AccelerationZ'],o=f32(b,o)
+    o=0
+    d={}
+    d['Engine'],o=i32(b,o)
+    d['CylHeadTemp'],o=f32(b,o)
+    d['WaterTemp'],o=f32(b,o)
+    d['Gear'],o=i32(b,o)
+    d['Fuel'],o=f32(b,o)
+    # GP Bikes m_fSpeedometer is recorded in m/s.
+    # PiBoSo CSV examples label Speed as km/h.
+    speed_mps, o = f32(b, o)
+    d["SpeedMps"] = speed_mps
+    d["Speed"] = speed_mps * 3.6
+    d['PosX'],o=f32(b,o)
+    d['PosY_3D'],o=f32(b,o)
+    d['PosY'],o=f32(b,o)
+    d['VelocityX'],o=f32(b,o)
+    d['VelocityY'],o=f32(b,o)
+    d['VelocityZ'],o=f32(b,o)
+    d['AccelerationX'],o=f32(b,o)
+    d['AccelerationY'],o=f32(b,o)
+    d['AccelerationZ'],o=f32(b,o)
     rot,o=f32s(b,o,9)
     for r in range(3):
         for c in range(3): d[f'Rot{r}{c}']=rot[r*3+c]
-    d['Yaw'],o=f32(b,o); d['Pitch'],o=f32(b,o); d['Roll'],o=f32(b,o)
-    d['YawVelRad'],o=f32(b,o); d['PitchVelRad'],o=f32(b,o); d['RollVelRad'],o=f32(b,o)
-    d['YawVel']=d['YawVelRad']*RAD_TO_DEG; d['PitchVel']=d['PitchVelRad']*RAD_TO_DEG; d['RollVel']=d['RollVelRad']*RAD_TO_DEG
-    d['PitchRel'],o=f32(b,o); d['RollRel'],o=f32(b,o)
-    susp,o=f32s(b,o,2); d['FrontSuspLength'],d['RearSuspLength']=susp
-    suspv,o=f32s(b,o,2); d['FrontSuspVelocity'],d['RearSuspVelocity']=suspv
-    d['Crashed'],o=i32(b,o); d['SteerRaw'],o=f32(b,o); d['InputThrottle'],o=f32(b,o); d['Throttle'],o=f32(b,o)
-    d['FrontBrake'],o=f32(b,o); d['RearBrake'],o=f32(b,o); d['Clutch'],o=f32(b,o)
-    wh,o=f32s(b,o,2); d['FrontWheel'],d['RearWheel']=wh
-    mats,o=i32s(b,o,2); d['FrontWheelMaterial'],d['RearWheelMaterial']=mats
+
+    d['Yaw'],o=f32(b,o)
+    d['Pitch'],o=f32(b,o)
+    d['Roll'],o=f32(b,o)
+    d['YawVelRad'],o=f32(b,o)
+    d['PitchVelRad'],o=f32(b,o)
+    d['RollVelRad'],o=f32(b,o)
+    d['YawVel']=d['YawVelRad']*RAD_TO_DEG
+    d['PitchVel']=d['PitchVelRad']*RAD_TO_DEG
+    d['RollVel']=d['RollVelRad']*RAD_TO_DEG
+    d['PitchRel'],o=f32(b,o)
+    d['RollRel'],o=f32(b,o)
+    susp,o=f32s(b,o,2)
+    d['FrontSuspLength'],d['RearSuspLength']=susp
+    suspv,o=f32s(b,o,2)
+    d['FrontSuspVelocity'],d['RearSuspVelocity']=suspv
+    d['Crashed'],o=i32(b,o)
+    d['SteerRaw'],o=f32(b,o)
+    d['InputThrottle'],o=f32(b,o)
+    d['Throttle'],o=f32(b,o)
+    d['FrontBrake'],o=f32(b,o)
+    d['RearBrake'],o=f32(b,o)
+    d['Clutch'],o=f32(b,o)
+    wh,o=f32s(b,o,2)
+    d['FrontWheel'],d['RearWheel']=wh
+    mats,o=i32s(b,o,2)
+    front_mat = mats[0]
+    rear_mat = mats[1]
+    d['FrontWheelMaterial'] = front_mat
+    d['RearWheelMaterial'] = rear_mat
+    d['FrontWheelMaterialName'] = MATERIAL_NAMES.get(front_mat, f"unknown_{front_mat}")
+    d['RearWheelMaterialName'] = MATERIAL_NAMES.get(rear_mat, f"unknown_{rear_mat}")
+    d['FrontOffTrack'] = 1 if front_mat in OFF_TRACK_MATERIALS else 0
+    d['RearOffTrack'] = 1 if rear_mat in OFF_TRACK_MATERIALS else 0
+    d['EitherWheelOffTrack'] = 1 if d['FrontOffTrack'] or d['RearOffTrack'] else 0
     tread,o=f32s(b,o,6)
     d['FrontTreadTempLeft'],d['FrontTreadTempCenter'],d['FrontTreadTempRight']=tread[:3]
     d['RearTreadTempLeft'],d['RearTreadTempCenter'],d['RearTreadTempRight']=tread[3:]
-    bp,o=f32s(b,o,2); d['FrontBrakePressure'],d['RearBrakePressure']=bp
-    d['SteerTorque'],o=f32(b,o); d['PitLimiter'],o=i32(b,o); d['ECUMode'],o=i32(b,o)
-    d['EngineMapping']=cstr(b[o:o+3]); o+=4  # char[3] + MSVC padding
-    d['TractionControl'],o=i32(b,o); d['EngineBraking'],o=i32(b,o); d['AntiWheeling'],o=i32(b,o); d['ECUState'],o=i32(b,o)
+    bp,o=f32s(b,o,2)
+    d['FrontBrakePressure'],d['RearBrakePressure']=bp
+    d['SteerTorque'],o=f32(b,o)
+    d['PitLimiter'],o=i32(b,o)
+    d['ECUMode'],o=i32(b,o)
+    d['EngineMapping']=cstr(b[o:o+3])
+    o+=4  # char[3] + MSVC padding
+    d['TractionControl'],o=i32(b,o)
+    d['EngineBraking'],o=i32(b,o)
+    d['AntiWheeling'],o=i32(b,o)
+    d['ECUState'],o=i32(b,o)
     d['RiderLRLean'],o=f32(b,o)
-    d['LatAcc']=d['AccelerationX']/G; d['LonAcc']=d['AccelerationZ']/G
+    d['LatAcc']=d['AccelerationX']
+    d['LonAcc']=d['AccelerationZ']
     return d
 
 def detect_lap_boundaries(rows):
@@ -192,9 +262,76 @@ def write_csv(infile,outfile=None):
     dt=datetime.fromtimestamp(header['start_us']/1_000_000,tz=timezone.utc).astimezone()
     duration=max(0,(header['end_us']-header['start_us'])/1_000_000)
     beacons = [c["correct_cum_end"] for c in cal if not c.get("estimated")]
-    columns=['Time','Distance','Engine','CylHeadTemp','WaterTemp','Gear','Speed','LatAcc','LonAcc','Steer','InputThrottle','Throttle','FrontBrake','RearBrake','Clutch','FrontSusp','RearSusp','FrontWheel','RearWheel','YawVel','PosX','PosY','timestamp_ms','RawRunTime','RunPos','LapIndex','LapNumber','IsOutLap','RawLapTime','CorrectLapTime','LapScale','RawLapTimeAtSample','CorrectedLapTimeAtSample','Fuel','EventIndex','PosY_3D','VelocityX','VelocityY','VelocityZ','AccelerationX','AccelerationY','AccelerationZ','Rot00','Rot01','Rot02','Rot10','Rot11','Rot12','Rot20','Rot21','Rot22','Yaw','Pitch','Roll','YawVelRad','PitchVelRad','RollVelRad','PitchVel','RollVel','PitchRel','RollRel','FrontSuspLength','RearSuspLength','FrontSuspVelocity','RearSuspVelocity','Crashed','SteerRaw','FrontWheelMaterial','RearWheelMaterial','FrontTreadTempLeft','FrontTreadTempCenter','FrontTreadTempRight','RearTreadTempLeft','RearTreadTempCenter','RearTreadTempRight','FrontBrakePressure','RearBrakePressure','SteerTorque','PitLimiter','ECUMode','EngineMapping','TractionControl','EngineBraking','AntiWheeling','ECUState','RiderLRLean']
+    columns=['Time','Distance','Engine','CylHeadTemp','WaterTemp','Gear','Speed','SpeedMps','LatAcc','LonAcc','Steer','InputThrottle','Throttle','FrontBrake','RearBrake','Clutch','FrontSusp','RearSusp','FrontWheel','RearWheel','FrontWheelMaterial','RearWheelMaterial','FrontWheelMaterialName','RearWheelMaterialName','FrontOffTrack','RearOffTrack','EitherWheelOffTrack','FrontWheel','RearWheel','YawVel','PosX','PosY','timestamp_ms','RawRunTime','RunPos','LapIndex','LapNumber','IsOutLap','RawLapTime','CorrectLapTime','LapScale','RawLapTimeAtSample','CorrectedLapTimeAtSample','Fuel','EventIndex','PosY_3D','VelocityX','VelocityY','VelocityZ','AccelerationX','AccelerationY','AccelerationZ','Rot00','Rot01','Rot02','Rot10','Rot11','Rot12','Rot20','Rot21','Rot22','Yaw','Pitch','Roll','YawVelRad','PitchVelRad','RollVelRad','PitchVel','RollVel','PitchRel','RollRel','FrontSuspLength','RearSuspLength','FrontSuspVelocity','RearSuspVelocity','Crashed','SteerRaw','FrontTreadTempLeft','FrontTreadTempCenter','FrontTreadTempRight','RearTreadTempLeft','RearTreadTempCenter','RearTreadTempRight','FrontBrakePressure','RearBrakePressure','SteerTorque','PitLimiter','ECUMode','EngineMapping','TractionControl','EngineBraking','AntiWheeling','ECUState','RiderLRLean']
     units={c:'' for c in columns}
-    units.update({'Time':'s','Distance':'m','Engine':'rpm','CylHeadTemp':'C','WaterTemp':'C','Speed':'km/h','LatAcc':'G','LonAcc':'G','Steer':'deg','InputThrottle':'%','Throttle':'%','FrontBrake':'bar','RearBrake':'bar','Clutch':'%','FrontSusp':'%','RearSusp':'%','FrontWheel':'m/s','RearWheel':'m/s','YawVel':'deg/s','PosX':'m','PosY':'m','timestamp_ms':'ms','RawRunTime':'s','RawLapTime':'s','CorrectLapTime':'s','RawLapTimeAtSample':'s','CorrectedLapTimeAtSample':'s','Fuel':'l','PosY_3D':'m','VelocityX':'m/s','VelocityY':'m/s','VelocityZ':'m/s','AccelerationX':'m/s^2','AccelerationY':'m/s^2','AccelerationZ':'m/s^2','Yaw':'rad','Pitch':'rad','Roll':'rad','YawVelRad':'rad/s','PitchVelRad':'rad/s','RollVelRad':'rad/s','PitchVel':'deg/s','RollVel':'deg/s','PitchRel':'rad','RollRel':'rad','FrontSuspLength':'m','RearSuspLength':'m','FrontSuspVelocity':'m/s','RearSuspVelocity':'m/s','FrontTreadTempLeft':'C','FrontTreadTempCenter':'C','FrontTreadTempRight':'C','RearTreadTempLeft':'C','RearTreadTempCenter':'C','RearTreadTempRight':'C','FrontBrakePressure':'bar','RearBrakePressure':'bar','SteerTorque':'Nm'})
+    units.update({
+        'Time':'s',
+        'Distance':'m',
+        'Engine':'rpm',
+        'CylHeadTemp':'C',
+        'WaterTemp':'C',
+        'Speed':'km/h',
+        'SpeedMps':'m/s',
+        'LatAcc':'G',
+        'LonAcc':'G',
+        'Steer':'deg',
+        'InputThrottle':'%',
+        'Throttle':'%',
+        'FrontBrake':'%',
+        'RearBrake':'%',
+        'Clutch':'%',
+        'FrontSusp':'%',
+        'RearSusp':'%',
+        'FrontWheel':'m/s',
+        'RearWheel':'m/s',
+        'YawVel':'deg/s',
+        'PosX':'m',
+        'PosY':'m',
+        'timestamp_ms':'ms',
+        'RawRunTime':'s',
+        'RawLapTime':'s',
+        'CorrectLapTime':'s',
+        'RawLapTimeAtSample':'s',
+        'CorrectedLapTimeAtSample':'s',
+        'Fuel':'l',
+        'PosY_3D':'m',
+        'VelocityX':'m/s',
+        'VelocityY':'m/s',
+        'VelocityZ':'m/s',
+        'AccelerationX':'m/s^2',
+        'AccelerationY':'m/s^2',
+        'AccelerationZ':'m/s^2',
+        'Yaw':'deg',
+        'Pitch':'deg',
+        'Roll':'deg',
+        'YawVelRad':'deg/s',
+        'PitchVelRad':'deg/s',
+        'RollVelRad':'deg/s',
+        'PitchVel':'deg/s',
+        'RollVel':'deg/s',
+        'PitchRel':'deg',
+        'RollRel':'deg',
+        'FrontSuspLength':'m',
+        'RearSuspLength':'m',
+        'FrontSuspVelocity':'m/s',
+        'RearSuspVelocity':'m/s',
+        'FrontTreadTempLeft':'C',
+        'FrontTreadTempCenter':'C',
+        'FrontTreadTempRight':'C',
+        'RearTreadTempLeft':'C',
+        'RearTreadTempCenter':'C',
+        'RearTreadTempRight':'C',
+        'FrontBrakePressure':'kPa',
+        'RearBrakePressure':'kPa',
+        'SteerTorque':'Nm',
+        'FrontWheelMaterial':'id',
+        'RearWheelMaterial':'id',
+        'FrontWheelMaterialName':'',
+        'RearWheelMaterialName':'',
+        'FrontOffTrack':'bool',
+        'RearOffTrack':'bool',
+        'EitherWheelOffTrack':'bool',
+    })
     metadata=[['Format','PiBoSo CSV File'],['Venue',meta.get('track_name','')],['Vehicle',meta.get('bike_name','')],['User',meta.get('rider_name','')],['Data Source','GP Bikes'],['Comment',f'Converted from MXBHREC; outlap-aware per-lap scaling; outlap_segments={outlaps}'],['Date',dt.strftime('%m/%d/%y')],['Time',dt.strftime('%H:%M:%S')],['Sample Rate',estimate_rate(rows)],['Duration',f'{duration:.3f}'],['Segment','Session'],['Beacon Markers',','.join(f'{x:.3f}' for x in beacons)]]
     with open(outfile,'w',newline='',encoding='utf-8') as f:
         w=csv.writer(f,quoting=csv.QUOTE_ALL)
@@ -214,3 +351,4 @@ if __name__=='__main__':
         print('usage: python mxbrec_gpb_to_piboso_csv_lap_scaled_v2.py recording.mxbrec [output.csv]')
         raise SystemExit(2)
     write_csv(sys.argv[1], sys.argv[2] if len(sys.argv)==3 else None)
+

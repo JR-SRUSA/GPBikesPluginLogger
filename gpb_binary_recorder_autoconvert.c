@@ -194,7 +194,6 @@ static uint64_t unix_time_us(void)
     GetSystemTimeAsFileTime(&ft);
     uli.LowPart = ft.dwLowDateTime;
     uli.HighPart = ft.dwHighDateTime;
-    // FILETIME is 100ns ticks since 1601-01-01. Unix epoch offset in 100ns ticks:
     return (uli.QuadPart - 116444736000000000ULL) / 10ULL;
 }
 
