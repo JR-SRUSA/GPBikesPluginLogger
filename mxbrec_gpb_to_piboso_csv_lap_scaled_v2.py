@@ -103,12 +103,9 @@ def decode_bike_data(b):
     d['Yaw'],o=f32(b,o)
     d['Pitch'],o=f32(b,o)
     d['Roll'],o=f32(b,o)
-    d['YawVelRad'],o=f32(b,o)
-    d['PitchVelRad'],o=f32(b,o)
-    d['RollVelRad'],o=f32(b,o)
-    d['YawVel']=d['YawVelRad']*RAD_TO_DEG
-    d['PitchVel']=d['PitchVelRad']*RAD_TO_DEG
-    d['RollVel']=d['RollVelRad']*RAD_TO_DEG
+    d['YawVel'],o=f32(b,o)
+    d['PitchVel'],o=f32(b,o)
+    d['RollVel'],o=f32(b,o)
     d['PitchRel'],o=f32(b,o)
     d['RollRel'],o=f32(b,o)
     susp,o=f32s(b,o,2)
@@ -116,12 +113,17 @@ def decode_bike_data(b):
     suspv,o=f32s(b,o,2)
     d['FrontSuspVelocity'],d['RearSuspVelocity']=suspv
     d['Crashed'],o=i32(b,o)
-    d['SteerRaw'],o=f32(b,o)
-    d['InputThrottle'],o=f32(b,o)
-    d['Throttle'],o=f32(b,o)
-    d['FrontBrake'],o=f32(b,o)
-    d['RearBrake'],o=f32(b,o)
-    d['Clutch'],o=f32(b,o)
+    d['Steer'],o=f32(b,o)
+    input_throttle,o=f32(b,o)
+    throttle,o=f32(b,o)
+    front_brake,o=f32(b,o)
+    rear_brake,o=f32(b,o)
+    clutch,o=f32(b,o)
+    d['InputThrottle'] = input_throttle * 100.0
+    d['Throttle'] = throttle * 100.0
+    d['FrontBrake'] = front_brake * 100.0
+    d['RearBrake'] = rear_brake * 100.0
+    d['Clutch'] = clutch * 100.0
     wh,o=f32s(b,o,2)
     d['FrontWheel'],d['RearWheel']=wh
     mats,o=i32s(b,o,2)
@@ -229,7 +231,6 @@ def read_recording(path):
     tl=float(meta.get('track_length') or 0); sl=float(meta.get('steer_lock') or 0); fs=float(meta.get('front_susp_max_travel') or 0); rs=float(meta.get('rear_susp_max_travel') or 0)
     for r in rows:
         r['Distance']=r['RunPos']*tl if tl>0 else r['RunPos']
-        r['Steer']=r['SteerRaw']*sl if sl>0 else r['SteerRaw']
         r['FrontSusp']=r['FrontSuspLength']/fs*100 if fs>0 else r['FrontSuspLength']
         r['RearSusp']=r['RearSuspLength']/rs*100 if rs>0 else r['RearSuspLength']
     boundaries,cal,outlaps=apply_outlap_aware_scaling(rows,laps)
@@ -262,7 +263,7 @@ def write_csv(infile,outfile=None):
     dt=datetime.fromtimestamp(header['start_us']/1_000_000,tz=timezone.utc).astimezone()
     duration=max(0,(header['end_us']-header['start_us'])/1_000_000)
     beacons = [c["correct_cum_end"] for c in cal if not c.get("estimated")]
-    columns=['Time','Distance','Engine','CylHeadTemp','WaterTemp','Gear','Speed','SpeedMps','LatAcc','LonAcc','Steer','InputThrottle','Throttle','FrontBrake','RearBrake','Clutch','FrontSusp','RearSusp','FrontWheel','RearWheel','FrontWheelMaterial','RearWheelMaterial','FrontWheelMaterialName','RearWheelMaterialName','FrontOffTrack','RearOffTrack','EitherWheelOffTrack','FrontWheel','RearWheel','YawVel','PosX','PosY','timestamp_ms','RawRunTime','RunPos','LapIndex','LapNumber','IsOutLap','RawLapTime','CorrectLapTime','LapScale','RawLapTimeAtSample','CorrectedLapTimeAtSample','Fuel','EventIndex','PosY_3D','VelocityX','VelocityY','VelocityZ','AccelerationX','AccelerationY','AccelerationZ','Rot00','Rot01','Rot02','Rot10','Rot11','Rot12','Rot20','Rot21','Rot22','Yaw','Pitch','Roll','YawVelRad','PitchVelRad','RollVelRad','PitchVel','RollVel','PitchRel','RollRel','FrontSuspLength','RearSuspLength','FrontSuspVelocity','RearSuspVelocity','Crashed','SteerRaw','FrontTreadTempLeft','FrontTreadTempCenter','FrontTreadTempRight','RearTreadTempLeft','RearTreadTempCenter','RearTreadTempRight','FrontBrakePressure','RearBrakePressure','SteerTorque','PitLimiter','ECUMode','EngineMapping','TractionControl','EngineBraking','AntiWheeling','ECUState','RiderLRLean']
+    columns=['Time','Distance','Engine','CylHeadTemp','WaterTemp','Gear','Speed','SpeedMps','LatAcc','LonAcc','Steer','InputThrottle','Throttle','FrontBrake','RearBrake','Clutch','FrontSusp','RearSusp','FrontWheel','RearWheel','FrontWheelMaterial','RearWheelMaterial','FrontWheelMaterialName','RearWheelMaterialName','FrontOffTrack','RearOffTrack','EitherWheelOffTrack','PosX','PosY','timestamp_ms','RawRunTime','RunPos','LapIndex','LapNumber','IsOutLap','RawLapTime','CorrectLapTime','LapScale','RawLapTimeAtSample','CorrectedLapTimeAtSample','Fuel','EventIndex','PosY_3D','VelocityX','VelocityY','VelocityZ','AccelerationX','AccelerationY','AccelerationZ','Rot00','Rot01','Rot02','Rot10','Rot11','Rot12','Rot20','Rot21','Rot22','Yaw','Pitch','Roll','YawVel','PitchVel','RollVel','PitchRel','RollRel','FrontSuspLength','RearSuspLength','FrontSuspVelocity','RearSuspVelocity','Crashed','FrontTreadTempLeft','FrontTreadTempCenter','FrontTreadTempRight','RearTreadTempLeft','RearTreadTempCenter','RearTreadTempRight','FrontBrakePressure','RearBrakePressure','SteerTorque','PitLimiter','ECUMode','EngineMapping','TractionControl','EngineBraking','AntiWheeling','ECUState','RiderLRLean']
     units={c:'' for c in columns}
     units.update({
         'Time':'s',
@@ -298,15 +299,12 @@ def write_csv(infile,outfile=None):
         'VelocityX':'m/s',
         'VelocityY':'m/s',
         'VelocityZ':'m/s',
-        'AccelerationX':'m/s^2',
-        'AccelerationY':'m/s^2',
-        'AccelerationZ':'m/s^2',
+        'AccelerationX':'G',
+        'AccelerationY':'G',
+        'AccelerationZ':'G',
         'Yaw':'deg',
         'Pitch':'deg',
         'Roll':'deg',
-        'YawVelRad':'deg/s',
-        'PitchVelRad':'deg/s',
-        'RollVelRad':'deg/s',
         'PitchVel':'deg/s',
         'RollVel':'deg/s',
         'PitchRel':'deg',
